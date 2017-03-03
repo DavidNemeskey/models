@@ -326,7 +326,7 @@ def main(_):
   eval_config.batch_size = 1
   eval_config.num_steps = 1
 
-  with tf.Graph().as_default():
+  with tf.Graph().as_default() as graph:
     initializer = tf.random_uniform_initializer(-config.init_scale,
                                                 config.init_scale)
 
@@ -348,26 +348,36 @@ def main(_):
       with tf.variable_scope("Model", reuse=True, initializer=initializer):
         mtest = PTBModel(is_training=False, config=eval_config,
                          input_=test_input)
+    with tf.name_scope('Global_ops'):
+        saver = tf.train.Saver(name='saver', max_to_keep=10)
+        init = tf.global_variables_initializer()
 
-    sv = tf.train.Supervisor(logdir=FLAGS.save_path)
-    with sv.managed_session() as session:
-      for i in range(config.max_max_epoch):
-        lr_decay = config.lr_decay ** max(i + 1 - config.max_epoch, 0.0)
-        m.assign_lr(session, config.learning_rate * lr_decay)
+  cfg = tf.ConfigProto(gpu_options=tf.GPUOptions(per_process_gpu_memory_fraction=0.9))
 
-        print("Epoch: %d Learning rate: %.3f" % (i + 1, session.run(m.lr)))
-        train_perplexity = run_epoch(session, m, eval_op=m.train_op,
-                                     verbose=True)
-        print("Epoch: %d Train Perplexity: %.3f" % (i + 1, train_perplexity))
-        valid_perplexity = run_epoch(session, mvalid)
-        print("Epoch: %d Valid Perplexity: %.3f" % (i + 1, valid_perplexity))
+  with tf.Session(graph=graph, config=cfg) as session:
+    session.run(init)
+    tf.train.start_queue_runners(session)
+    for i in range(config.max_max_epoch):
+      lr_decay = config.lr_decay ** max(i + 1 - config.max_epoch, 0.0)
+      m.assign_lr(session, config.learning_rate * lr_decay)
 
-      test_perplexity = run_epoch(session, mtest)
-      print("Test Perplexity: %.3f" % test_perplexity)
+      print("Epoch: %d Learning rate: %.3f" % (i + 1, session.run(m.lr)))
+      train_perplexity = run_epoch(session, m, eval_op=m.train_op,
+                                   verbose=True)
+      print("Epoch: %d Train Perplexity: %.3f" % (i + 1, train_perplexity))
+      valid_perplexity = run_epoch(session, mvalid)
+      print("Epoch: %d Valid Perplexity: %.3f" % (i + 1, valid_perplexity))
 
       if FLAGS.save_path:
         print("Saving model to %s." % FLAGS.save_path)
-        sv.saver.save(session, FLAGS.save_path, global_step=sv.global_step)
+        saver.save(session, FLAGS.save_path, global_step=i)
+
+    test_perplexity = run_epoch(session, mtest)
+    print("Test Perplexity: %.3f" % test_perplexity)
+
+    if FLAGS.save_path:
+      print("Saving model to %s." % FLAGS.save_path)
+      saver.save(session, FLAGS.save_path, global_step=i)
 
 
 if __name__ == "__main__":
