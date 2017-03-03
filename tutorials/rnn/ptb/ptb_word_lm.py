@@ -352,9 +352,9 @@ def main(_):
         saver = tf.train.Saver(name='saver', max_to_keep=10)
         init = tf.global_variables_initializer()
 
-  cfg = tf.ConfigProto(gpu_options=tf.GPUOptions(per_process_gpu_memory_fraction=0.9))
+  #cfg = tf.ConfigProto(gpu_options=tf.GPUOptions(per_process_gpu_memory_fraction=0.5))
 
-  with tf.Session(graph=graph, config=cfg) as session:
+  with tf.Session(graph=graph) as session:
     session.run(init)
     tf.train.start_queue_runners(session)
     for i in range(config.max_max_epoch):
